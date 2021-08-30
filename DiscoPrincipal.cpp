@@ -1,5 +1,6 @@
 #include "encabezados/DiscoPrincipal.h"
 #include "encabezados/Estructuras.h"
+#include "encabezados/Comandos.h"
 #include <iostream>
 #include <stdlib.h>
 #include <locale>
@@ -15,18 +16,12 @@ using namespace std;
 DiscoPrincipal::DiscoPrincipal(){}
 
 void DiscoPrincipal::mkdisk(vector<string> tokens){
-    
-    // instancia disco y particiones
-    Estructuras::DiscoCommand disco;
-    Estructuras::MBR mbr_disco;
-    Estructuras::EBR ebr_disco;
-    
-
-    string size = "";
-    string u = "";
+    int size = 0;
+    char unit='m';
     string path = "";
-  
+    string fit ="f";
     int tamanio;
+
     // todos los parametros vienen con su valor
     for (string token :tokens){
         // separa cada parametro hasta encontrar el signo igual.
@@ -46,13 +41,13 @@ void DiscoPrincipal::mkdisk(vector<string> tokens){
                 cout<< "El tamanio del disco no puede ser 0." <<endl; 
                 break;
             }else{
-                // cout<< "tamanio: "<< stoi(token)<<endl; 
-                disco.size = stoi(token);
+                cout<< "tamanio: "<< stoi(token)<<endl; 
+                size = stoi(token);
             }
         } else if(tk == "f" ){
             if (token == "f" || token == "b" || token == "w"){
-                disco.fit = token.c_str()[0];
-                cout<<"disco fit: " << disco.fit<< endl;
+                fit = token;
+                cout<<"disco fit: " << fit<< endl;
                 
             }else{
                 cout<<"El fit tiene valor invalido."<<endl;
@@ -62,7 +57,7 @@ void DiscoPrincipal::mkdisk(vector<string> tokens){
          
             if(token == "m" || token == "k"){
                 cout<<"Unit valido"<< endl;
-                disco.unit = token.c_str()[0];
+                unit = token.c_str()[0];
                 
             } else{
                 cout<<"El unit tiene un valor invalido."<<endl;
@@ -70,20 +65,21 @@ void DiscoPrincipal::mkdisk(vector<string> tokens){
             }
         } else if(tk == "path"){
             // cout<< "path: " << token <<endl;
-            disco.path = token;
+            path = token;
         } else{
            cout<< "El parametro " << tk << " no es correcto."<<endl;
         }
     }
 
-//    VALIDACION DE PARAMS OBLIGATORIOS.
-    if(disco.size == 0 || disco.path == ""){
+    //VALIDACION DE PARAMS OBLIGATORIOS.
+    if(size == 0 || path == ""){
         cout<< "El disco no se creo por falta de parametros obligatorios." <<endl;
     } else{
+        // instancia disco y particiones
+        MBR mbr_disco;
+        EBR ebr_disco;
+        
         char buffer[1024];
-
-        //MBR
-        mbr_disco.fit =  disco.fit; //fit
 
         std::time_t t = std::time(0);   
         std::tm* now = std::localtime(&t);  
@@ -94,46 +90,77 @@ void DiscoPrincipal::mkdisk(vector<string> tokens){
                         to_string(now->tm_min) + ":" + 
                         to_string(now->tm_sec);
 
-        mbr_disco.fecha = fecha; // fecha
-        mbr_disco.signature = rand()%51;; //id unico,numero 0-50
-        if(disco.unit == 'k'){ // tamanio
+        strcpy(mbr_disco.fecha, fecha.c_str());
+
+        strcpy(mbr_disco.fit, fit.c_str());
+
+        mbr_disco.signature = rand() % 51; //id unico,numero 0-50
+        if(unit == 'k'){ // tamanio
             // cout<< "tamanio del disco" << disco.size<<endl;
-            mbr_disco.size = (disco.size) * 1024;
+            mbr_disco.size = (size) * 1024;
             // cout<< "mbr del disco" << mbr_disco.size<<endl;
         }else{
-            mbr_disco.size = (disco.size) * (1024*1024);
+            mbr_disco.size = (size) * (1024*1024);
             // cout<< "mbr del disco" << mbr_disco.size<<endl;
         }
-
-        //Particiones
-        Estructuras::Particion particionesVacias;
+        //Particiones vacias
+        Particion particionesVacias;
         for (int i=0; i<4; i++){
-            mbr_disco.partitions[i] = particionesVacias;
+            mbr_disco.partitions[i].status = '0';
+            mbr_disco.partitions[i].size = 0;
+            mbr_disco.partitions[i].type = 'p';
+            mbr_disco.partitions[i].fit = 'w';
+            mbr_disco.partitions[i].part_start = -1;
+            strcpy(mbr_disco.partitions[i].name, "-");
         }
                 
-    
-        FILE *discofile = fopen(disco.path.c_str(), "wb");
-        if (discofile != NULL){
-            
+        FILE *disk_file = fopen(path.c_str(), "wb");
+        // AGREGAR AL DISCO
+        if (disk_file != NULL) {
+            // GUARDAR MBR
+            for (int i = 0; i < 1024; i++)
+                buffer[i] = '\0';
+
+            // RELLENAR EL RESTO CON 0
+            for (int byte_index = 0;
+                byte_index < size;
+                byte_index++)
+            fwrite(buffer, 1024, 1, disk_file);
+
+            // GUARDAR MBR
+            fseek(disk_file, 0, SEEK_SET);
+            fwrite(&mbr_disco, sizeof(MBR), 1, disk_file);
+            fclose(disk_file);
+        } else{
+           // OBTENER LA RUTA PARA CREAR EL DIRECTORIO.
+            vector<string> ruta = DiscoPrincipal::split(path, "/");
+            string newPath = "/";
+
+            for (int i=0; i< ruta.size()-1; i++){
+               newPath += ruta[i] + "/";
+            }
+
+           
+            //CREO EL DIRECTORIO
+            string comando1 = "mkdir -p \"" + newPath + "\"";
+            system(comando1.c_str());
+
+            //CREO EL DISCO EN DIRECTORIO.
+            FILE *discofile = fopen(path.c_str(), "wb");
             for (int i = 0; i < 1024; i++){
                 buffer[i] = '\0';
             }   
             
-            
             for (int i = 0;i < mbr_disco.size; i++){
                 fwrite(&buffer, 1024, 1, discofile);
             }
-            
-            
             fseek(discofile, 0, SEEK_SET);
-            fwrite(&mbr_disco, sizeof(Estructuras::MBR), 1, discofile);
-            
+            fwrite(&mbr_disco, sizeof(MBR), 1, discofile);
             fclose(discofile);
-        } else{
-            cout << "ERROR, NO SE CREO EL DISK " << endl;
         }
 
-        imprimirDisco(disco.path);
+        
+        imprimirDisco(path);
         
     }
     
@@ -193,20 +220,117 @@ void DiscoPrincipal::rmdisk(vector<string> tokens){
 }
 
 
+void DiscoPrincipal::fdisk(vector<string> tokens){
+    string estado;
+    string size;
+    string path;
+  
+    //VERIFICAR SI EXISTE DELETE EN PARAMETROS.;
+    for(string token : tokens){
+
+        string tk = token.substr(0, token.find("="));
+        token.erase(0,tk.length()+1);
+        //tk es el parametro y se pasa todo en minusculas
+        //token es el valor del parametro
+
+        for(int i=0; i<tk.size();i++){
+            tk[i] = tolower(tk[i]);
+        }
+
+        // OBTENER EL PATH;
+        if(tk == "path"){
+            path = token;
+        }
+
+
+        // VERIFICA QUE TIPOS DE COMANDOS VIENE.
+        if(tk == "delete"){
+            estado = "delete";
+        }else if(tk == "add"){
+            estado = "add";
+        } else{
+            estado = "normal";
+        }
+
+    }
+
+    // MBR discoMBR;
+    // FILE *disk_file = fopen(path.c_str(), "rb+");
+    //AGREGAR PARTICION YA SEA PRIMARIA/EXTENDIDA O LOGICA Y SUS PROPIEDADES
+    //ELIMINA LA PARTICION
+    if (estado == "delete"){
+
+    //AGREGAR O QUITAR ESPACIO DE LA PARTICION
+    }else if(estado == "add"){
+
+    } else{
+        char unit = 'k';
+        char type = 'p';
+        char fit = 'w';
+        int size = 0;
+        char name[16];
+        // OBTENER PARAMETROS PARA PARTICION
+        // size, u, type, f, name
+        for(string token : tokens){
+            string tk = token.substr(0, token.find("="));
+            token.erase(0,tk.length()+1);
+
+            for(int i=0; i<tk.size();i++){
+                tk[i] = tolower(tk[i]);
+            }
+
+            if(tk == "size"){
+                size = stoi(token);
+                if(size == 0){
+                    cout<< ""<<endl;
+                    cout <<"El valor de la particion no puede ser 0."<<endl;
+                    break;
+                }
+            }else if(tk == "u"){
+                unit = token.c_str()[0];
+            }else if(tk == "type"){
+                type = token.c_str()[0];
+            }else if(tk == "name"){
+                strcpy(name, token.c_str());
+            }else if(tk == "f"){
+                fit = token.c_str()[0];
+            }
+        }
+
+        cout<< "VARIABLES PARA PARTICION"<<endl;
+        cout<< "size: " << size <<endl;
+        cout<< "type: " << type <<endl;
+        cout<< "unit: " << unit <<endl;
+        cout<< "fit: " << fit <<endl;
+        cout<< "name: " << name <<endl;
+        cout<< "path: " << path <<endl;
+        
+        
+        // VERIFICAR EL ESTADO,
+        cout<< "" <<endl;
+        cout<<"IMPRIMIR DISCO EXISTENTE"<<endl;
+        imprimirDisco(path);
+       
+
+    }
+
+}
+
+
 void DiscoPrincipal::imprimirDisco(string path) {
   // ABRIR ARCHIVO
-  Estructuras::MBR mbr_data;
+  MBR mbr_data;
   FILE *disk_file = fopen(path.c_str(), "rb+");
 
   // EXISTE
   if (disk_file != NULL) {
     
     fseek(disk_file, 0, SEEK_SET);
-    fread(&mbr_data, sizeof(Estructuras::MBR), 1, disk_file);
+    fread(&mbr_data, sizeof(MBR), 1, disk_file);
 
     // IMPRIMIR
     cout << "--- MBR ---\n";
-    cout << "MBRSize: " << sizeof(Estructuras::MBR) << "\nDate: " << mbr_data.fecha
+    cout << "MBRSize: " << sizeof(MBR) << "\nDate: " << mbr_data.fecha
          << "\nFit: " << mbr_data.fit << "\nSignature: " << mbr_data.signature
          << "\nSize: " << mbr_data.size << "\n";
     cout << "\n--- PARTICIONES ---";
@@ -225,4 +349,26 @@ void DiscoPrincipal::imprimirDisco(string path) {
 
   // CERRAR
   fclose(disk_file);
+}
+
+
+
+vector<string> DiscoPrincipal::split(string text, string text_split)
+{
+    vector<string> cadena;
+    if (text.empty())
+    {
+        return cadena;
+    }
+    
+    int n = text.length();
+    char char_array[n + 1];
+    strcpy(char_array, text.c_str());
+    char* point = strtok(char_array, text_split.c_str());
+    while (point!=NULL)
+    {
+        cadena.push_back(string(point));
+        point = strtok(NULL, text_split.c_str());
+    }
+    return cadena;
 }

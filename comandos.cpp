@@ -39,13 +39,19 @@ void Comandos::comandosTerminal(string comand){
 
 void Comandos::funciones(string token, vector<string>opciones){
     if (token == "mkdisk"){
+        cout<< ""<<endl;
         cout << "SE ESTA CREANDO EL DISCO..." << std::endl;
         diskprincipal.mkdisk(opciones);
 
     }else if(token == "rmdisk"){
+        cout<<""<< endl;
         cout<< "SE ESTA ELIMINANDO EL DISCO..." <<endl;
 
         diskprincipal.rmdisk(opciones);
+    } else if(token == "fdisk"){
+        cout<< "" <<endl;
+        cout<< "SE ESTA ADMINISTRANDO EL DISCO... " <<endl;
+        diskprincipal.fdisk(opciones);
     }
 }
 
